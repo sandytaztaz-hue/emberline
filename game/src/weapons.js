@@ -54,6 +54,9 @@ function buildModel(id, mats) {
     mag.rotation.x = 0.25;
     g.add(mag);
     g.add(box(0.02, 0.03, 0.1, mats.accent, 0, 0.06, -0.28));
+    // Rear sight + front post so the rifle reads as a rifle, not a slab.
+    g.add(box(0.06, 0.04, 0.03, mats.dark, 0, 0.07, 0.08));
+    g.add(box(0.015, 0.05, 0.015, mats.accent, 0, 0.06, -0.32));
   } else {
     g.add(box(0.08, 0.09, 0.5, mats.body, 0, 0, -0.12));
     g.add(box(0.035, 0.035, 0.62, mats.dark, 0, 0.02, -0.62));
@@ -70,9 +73,9 @@ function buildModel(id, mats) {
 
 export function createWeaponRig(camera, gameState = null) {
   const mats = {
-    body: new THREE.MeshStandardMaterial({ color: 0x3a444c, roughness: 0.5, metalness: 0.4 }),
-    dark: new THREE.MeshStandardMaterial({ color: 0x22282e, roughness: 0.7, metalness: 0.25 }),
-    grip: new THREE.MeshStandardMaterial({ color: 0x1a1e22, roughness: 0.85, metalness: 0.1 }),
+    body: new THREE.MeshStandardMaterial({ color: 0x55636e, roughness: 0.5, metalness: 0.4 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x2c343b, roughness: 0.7, metalness: 0.25 }),
+    grip: new THREE.MeshStandardMaterial({ color: 0x24292e, roughness: 0.85, metalness: 0.1 }),
     accent: new THREE.MeshStandardMaterial({ color: 0xf0a830, roughness: 0.4, metalness: 0.3, emissive: 0x664400 }),
   };
   const models = {};
@@ -84,11 +87,29 @@ export function createWeaponRig(camera, gameState = null) {
     models[id] = m;
   }
 
-  // One flash plane + light, re-parented to the active gun's muzzle.
-  const flash = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.16, 0.16),
-    new THREE.MeshBasicMaterial({ color: 0xffc860, transparent: true, opacity: 0.75, depthWrite: false, side: THREE.DoubleSide }),
-  );
+  // Muzzle flash: two crossed planes with a radial-gradient texture, so a
+  // shot reads as a flash instead of the flat yellow quad it used to be.
+  function flashTexture() {
+    const c = document.createElement('canvas');
+    c.width = 128;
+    c.height = 128;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(64, 64, 2, 64, 64, 62);
+    grad.addColorStop(0, 'rgba(255,240,190,1)');
+    grad.addColorStop(0.35, 'rgba(255,190,80,0.9)');
+    grad.addColorStop(1, 'rgba(255,140,30,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+  const flashMat = new THREE.MeshBasicMaterial({ map: flashTexture(), transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide });
+  const flash = new THREE.Group();
+  const flashPlane1 = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.22), flashMat);
+  const flashPlane2 = flashPlane1.clone();
+  flashPlane2.rotation.z = Math.PI / 2;
+  flash.add(flashPlane1, flashPlane2);
   flash.visible = false;
   const flashLight = new THREE.PointLight(0xffb840, 0, 6);
   const flashRig = new THREE.Group();

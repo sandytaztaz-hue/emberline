@@ -32,9 +32,9 @@ function yawTo(from, x, z) {
 }
 
 function buildBody(scene, bot) {
-  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2b343c, roughness: 0.6, metalness: 0.2 });
-  const darkMat = new THREE.MeshStandardMaterial({ color: 0x1c2126, roughness: 0.8, metalness: 0.1 });
-  const visorMat = new THREE.MeshStandardMaterial({ color: 0xf0a830, roughness: 0.3, metalness: 0.2, emissive: 0x8a5c00 });
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a5a66, roughness: 0.6, metalness: 0.2 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x232a30, roughness: 0.8, metalness: 0.1 });
+  const visorMat = new THREE.MeshStandardMaterial({ color: 0xffb020, roughness: 0.3, metalness: 0.2, emissive: 0xff9d00, emissiveIntensity: 1.8 });
   const group = new THREE.Group();
 
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.78, 0.3), bodyMat);
@@ -45,12 +45,20 @@ function buildBody(scene, bot) {
   head.userData = { bot, part: 'head' };
   const visor = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.05), visorMat);
   visor.position.set(0, 1.55, -0.13);
+  // Amber shoulder + chest trim so a bot reads as a figure, not a dark box.
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0xf0a830, emissive: 0x7a5200, emissiveIntensity: 0.9, roughness: 0.5 });
+  const shoulderL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, 0.32), trimMat);
+  shoulderL.position.set(-0.26, 1.42, 0);
+  const shoulderR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, 0.32), trimMat);
+  shoulderR.position.set(0.26, 1.42, 0);
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, 0.02), trimMat);
+  chest.position.set(0, 1.18, -0.16);
   const legs = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.7, 0.24), darkMat);
   legs.position.y = 0.35;
   legs.userData = { bot, part: 'legs' };
   const gun = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.6), darkMat);
   gun.position.set(0.18, 1.25, -0.3);
-  group.add(torso, head, visor, legs, gun);
+  group.add(torso, head, visor, legs, gun, shoulderL, shoulderR, chest);
   group.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
   group.position.copy(bot.pos);
   scene.add(group);

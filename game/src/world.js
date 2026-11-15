@@ -33,7 +33,80 @@ export function createWorld(scene) {
   const group = new THREE.Group();
   scene.add(group);
   scene.background = new THREE.Color(PALETTE.canvas);
-  scene.fog = new THREE.Fog(PALETTE.canvas, 55, 120);
+  scene.fog = new THREE.Fog(new THREE.Color('#2b333d'), 48, 115);
+
+  // Dusk sky dome: procedural vertical gradient (indigo -> violet -> amber
+  // horizon) + a low sun disc, so the top half of the frame reads as dusk
+  // instead of flat dark. CanvasTexture is generated at runtime; no assets.
+  function skyTexture() {
+    const c = document.createElement('canvas');
+    c.width = 4;
+    c.height = 512;
+    const g = c.getContext('2d');
+    const grad = g.createLinearGradient(0, 0, 0, 512);
+    grad.addColorStop(0.0, '#141a2e');
+    grad.addColorStop(0.45, '#3a3050');
+    grad.addColorStop(0.68, '#8a4a3a');
+    grad.addColorStop(0.78, '#e08a3c');
+    grad.addColorStop(0.86, '#5a3a28');
+    grad.addColorStop(1.0, '#1a232b');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 4, 512);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+  const skyDome = new THREE.Mesh(
+    new THREE.SphereGeometry(110, 24, 16),
+    new THREE.MeshBasicMaterial({ map: skyTexture(), side: THREE.BackSide, fog: false }),
+  );
+  group.add(skyDome);
+  // Low sun disc + halo, set low in the north-west sky so it sits in the
+  // spawn view down mid, where the cover shots look.
+  const sunDisc = new THREE.Mesh(
+    new THREE.CircleGeometry(7, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffd9a0, fog: false }),
+  );
+  sunDisc.position.set(-58, 15, -88);
+  sunDisc.lookAt(0, 2, 0);
+  group.add(sunDisc);
+  const sunHalo = new THREE.Mesh(
+    new THREE.CircleGeometry(15, 32),
+    new THREE.MeshBasicMaterial({ color: 0xe08a3c, transparent: true, opacity: 0.28, fog: false }),
+  );
+  sunHalo.position.set(-58, 15, -88);
+  sunHalo.lookAt(0, 2, 0);
+  group.add(sunHalo);
+
+  // Glowing site letters (A amber, B blue) floating above each site, so the
+  // map reads at a glance from any lane.
+  function letterTexture(letter, color) {
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 256;
+    const g = c.getContext('2d');
+    g.font = 'bold 190px system-ui, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.shadowColor = color;
+    g.shadowBlur = 28;
+    g.fillStyle = color;
+    g.fillText(letter, 128, 136);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+  function siteLetter(letter, color, x, z) {
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.8, 2.8),
+      new THREE.MeshBasicMaterial({ map: letterTexture(letter, color), transparent: true, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    m.position.set(x, 4.2, z);
+    group.add(m);
+    return m;
+  }
+  const letterA = siteLetter('A', '#f0a830', -22, -14);
+  const letterB = siteLetter('B', '#4da6ff', 22, -14);
 
   const mats = {};
   for (const name of Object.keys(PALETTE)) {
@@ -125,10 +198,54 @@ export function createWorld(scene) {
   box(20, 0.6, 0.6, 0, 0.3, -20.5, mats.hairline);
   box(16, 0.6, 0.6, -8, 0.3, 20.5, mats.hairline);
 
+  // Painted ground markings (flat, non-colliding): tinted site zones, a mid
+  // lane stripe, and hazard strips flanking the mid-link door gaps.
+  const zoneA = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.siteA), transparent: true, opacity: 0.14, roughness: 0.9 });
+  const zoneB = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.siteB), transparent: true, opacity: 0.14, roughness: 0.9 });
+  box(8, 0.02, 6, -22, 0.01, -14, zoneA, false);
+  box(8, 0.02, 6, 22, 0.01, -14, zoneB, false);
+  box(0.35, 0.02, 22, 0, 0.01, 1, mats.lane, false);
+  box(0.5, 0.02, 1.2, -12, 0.01, -2.6, mats.hazard, false);
+  box(0.5, 0.02, 1.2, -12, 0.01, 2.6, mats.hazard, false);
+  box(0.5, 0.02, 1.2, 12, 0.01, -2.6, mats.hazard, false);
+  box(0.5, 0.02, 1.2, 12, 0.01, 2.6, mats.hazard, false);
+
+  // Barrels (cylinders with box colliders) and a storage silo at the north
+  // edge, kept clear of every waypoint so bot routes stay open.
+  const barrelGeo = new THREE.CylinderGeometry(0.55, 0.55, 1.3, 12);
+  const barrelRust = new THREE.MeshStandardMaterial({ color: 0x7a4a22, roughness: 0.7, metalness: 0.3 });
+  const barrelGreen = new THREE.MeshStandardMaterial({ color: 0x2e4a3a, roughness: 0.7, metalness: 0.3 });
+  function barrel(x, z, mat) {
+    const m = new THREE.Mesh(barrelGeo, mat);
+    m.position.set(x, 0.65, z);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    group.add(m);
+    colliders.push(new THREE.Box3().setFromObject(m));
+    shootables.push(m);
+  }
+  barrel(-8, 8, barrelRust);
+  barrel(-8.9, 8.6, barrelGreen);
+  barrel(9, 9, barrelGreen);
+  barrel(9.9, 8.4, barrelRust);
+  barrel(-27, 4, barrelGreen);
+  barrel(27, 6, barrelRust);
+  box(2.2, 5.5, 2.2, -8, 2.75, -20.5, mats.hairline);
+  box(2.2, 0.4, 2.2, -8, 5.7, -20.5, mats.surface);
+
+  // Floodlight mast over the B dock: emissive head + a cool point light so
+  // the east side stops reading as a black void.
+  const headMat = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0xbfd9ff, emissiveIntensity: 2.2 });
+  box(0.22, 6.5, 0.22, 28, 3.25, -19, mats.hairline);
+  box(0.9, 0.3, 0.4, 28, 6.5, -19, headMat);
+  const dockLight = new THREE.PointLight(new THREE.Color('#9cc4ff'), 1.6, 22, 2);
+  dockLight.position.set(26, 6, -17);
+  scene.add(dockLight);
+
   // Light: cool hemisphere, warm low sun with shadows, amber furnace point light.
-  const sky = new THREE.HemisphereLight(new THREE.Color(PALETTE.muted), new THREE.Color(PALETTE.canvas), 1.3);
+  const sky = new THREE.HemisphereLight(new THREE.Color(PALETTE.muted), new THREE.Color(PALETTE.canvas), 1.7);
   scene.add(sky);
-  const sun = new THREE.DirectionalLight(new THREE.Color('#ffe0b0'), 2.6);
+  const sun = new THREE.DirectionalLight(new THREE.Color('#ffe0b0'), 3.2);
   sun.position.set(18, 26, 10);
   sun.target.position.set(0, 0, -3);
   sun.castShadow = true;
@@ -140,7 +257,7 @@ export function createWorld(scene) {
   sun.shadow.camera.far = 80;
   sun.shadow.bias = -0.0006;
   scene.add(sun, sun.target);
-  const fill = new THREE.DirectionalLight(new THREE.Color(PALETTE.muted), 0.7);
+  const fill = new THREE.DirectionalLight(new THREE.Color(PALETTE.muted), 0.9);
   fill.position.set(-10, 9, 12);
   scene.add(fill);
   const furnaceLight = new THREE.PointLight(new THREE.Color(PALETTE.accent), 2.0, 20, 2);
@@ -183,6 +300,10 @@ export function createWorld(scene) {
     t += dt;
     furnaceLight.intensity = 1.9 + Math.sin(t * 7.3) * 0.3 + Math.sin(t * 13.7) * 0.18;
     furnaceMat.emissiveIntensity = 1.15 + Math.sin(t * 9.1) * 0.22;
+    // Site beacons breathe gently so the letters catch the eye without flashing.
+    const pulse = 0.85 + Math.sin(t * 2.2) * 0.15;
+    letterA.material.opacity = pulse;
+    letterB.material.opacity = pulse;
   }
 
   return {

@@ -400,6 +400,10 @@ function settle(n) {
 
 function runShot(name) {
   started = true;
+  // Shot modes are the cover art: let the yard show through the panel
+  // instead of a near-black backdrop.
+  const overlayEl = document.getElementById('overlay');
+  if (overlayEl) overlayEl.style.background = 'rgba(16,22,26,0.5)';
   if (name === 'start') {
     state.player.pos.set(0, 0, 18);
     state.player.yaw = 0;
@@ -466,10 +470,34 @@ function runShot(name) {
       shoot();
     }
     settle(1);
+    // Let the muzzle flash (60ms) and tracers expire before the freeze, so
+    // the capture shows the kill and the HUD, not a flash quad mid-burst.
+    settle(8);
     // Final top-up: return fire during the shooting sequence may have dented
     // HP again; the capture should show a healthy player.
     state.player.hp = 100;
     lastHp = 100;
+    syncHud();
+  } else if (name === 'buy') {
+    // Buy-phase cover: the economy on screen — buy menu open, $800, rifle
+    // unaffordable yet, bots already holding mid and the sites.
+    hud.hideOverlay();
+    state.phase = 'buy';
+    state.roundTime = 15;
+    rounds.buyOpen = true;
+    state.player.pos.set(0, 0, 18);
+    state.player.yaw = 0;
+    state.player.pitch = 0;
+    settle(240);
+    state.player.hp = 100;
+    state.player.alive = true;
+    lastHp = 100;
+    prevAlive = true;
+    // Bots can land a kill during the settle; the capture is the buy menu,
+    // not a death notice — drop any feed lines from the settle.
+    state.feed.length = 0;
+    _aim.set(0, 1.4, -10);
+    aimAt(_aim);
     syncHud();
   } else {
     state.score.vanguard = 1;
@@ -479,11 +507,11 @@ function runShot(name) {
     state.bomb.state = 'planted';
     state.bomb.site = 'A';
     state.bomb.fuse = 32;
-    state.player.pos.set(-18, 0, -10);
+    state.player.pos.set(-14, 0, -6);
     state.player.yaw = 0;
     state.player.pitch = 0;
     settle(10);
-    _aim.set(-22, 0.8, -14);
+    _aim.set(-22, 1.0, -14);
     aimAt(_aim);
     hud.showOverlay('roundEnd', { winner: 'vanguard', reason: 'explode', score: { vanguard: 1, sentinel: 0 } });
     syncHud();
